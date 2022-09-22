@@ -3,10 +3,10 @@ package zio.web.http.internal
 import java.io.IOException
 
 import zio.{ Chunk, IO, ZIO }
-import zio.nio.core.channels.SocketChannel
 import zio.web.http.{ EMPTY_LINE, NEW_LINE }
-import zio.nio.core.channels.AsynchronousSocketChannel
-import zio.duration.Duration
+import zio.nio.channels.SocketChannel
+import zio.nio.channels.AsynchronousSocketChannel
+import zio.Duration
 
 abstract private[http] class ChannelReader[Error] {
 
@@ -57,7 +57,7 @@ private[http] object ChannelReader {
     protected val CHUNK_SIZE: Int = chunkSize
 
     protected def readChunk(size: Int): IO[IOException, Chunk[Byte]] =
-      channel.readChunk(size)
+      channel.flatMapNonBlocking(ops => ops.readChunk(size))
   }
 
   def apply(channel: AsynchronousSocketChannel, chunkSize: Int, timeout: Duration): ChannelReader[Exception] =

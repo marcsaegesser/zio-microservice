@@ -1,22 +1,22 @@
 package zio.web.example
 
 import zio._
-//import zio.duration._
-import zio.logging.{ LogFormat, LogLevel, Logging, log }
 import zio.schema.{ DeriveSchema, Schema }
 import zio.web.{ Endpoints, Handler, Handlers, endpoint }
 import zio.web.codec.JsonCodec
 import zio.web.http.{ HttpMiddleware, HttpProtocolModule, HttpServer, HttpServerConfig }
 import zio.web.http.model.{ Method, Route }
 import zio.web.http.HttpClientConfig
+import zio.{ Console, ZIOAppDefault }
 
-object HelloServer extends App with HelloExample {
+object HelloServer extends ZIOAppDefault with HelloExample {
 
   // just define handlers for all endpoints
   lazy val sayHelloHandlers =
     Handlers(Handler.make(sayHello) { (req: HelloRequest) =>
       for {
-        _ <- console.putStrLn(s"Handling sayHello request for ${req.name}")
+        _ <- ZIO.logInfo(s"Handling sayHello request for ${req.name}")
+        _ <- Console.printLine(s"Handling sayHello request for ${req.name}").ignore
       } yield TextPlainResponse(s"Hello ${req.name}!")
     })
 
@@ -25,56 +25,47 @@ object HelloServer extends App with HelloExample {
     makeServer(HttpMiddleware.none, sayHelloService, sayHelloHandlers)
 
   // and run it
-  def run(args: List[String]): URIO[ZEnv, ExitCode] =
-    program.provideSomeLayer[ZEnv](loggingLayer).exitCode
+  def run =
+    program.provideSomeLayer(logging.console(logLevel=LogLevel.Debug)).exitCode
 
   lazy val program =
     for {
-      _      <- log.info("Hello server started")
+      _      <- ZIO.logInfo("Hello server started")
       config = HttpServerConfig("localhost", 8080)
       server <- HttpServer.run.provideLayer(httpServer(config))
       _      <- server.awaitShutdown.orDie
-      _      <- log.info("Hello server stopped")
+      _      <- ZIO.logInfo("Hello server stopped")
     } yield ()
 
-  // misc utils
-  lazy val loggingLayer =
-    Logging.console(LogLevel.Debug, LogFormat.ColoredLogFormat()) >>>
-      Logging.withRootLoggerName("hello-example-server")
-
   def httpServer(config: HttpServerConfig) =
-    (ZLayer.requires[ZEnv with Logging] ++ ZLayer.succeed(config)) >+> helloServerLayer
+    ZLayer.succeed(config) >+> helloServerLayer
 }
 
-object HelloClient extends App with HelloExample {
+object HelloClient extends ZIOAppDefault with HelloExample {
 
   // just generate the client
   lazy val helloClientLayer =
     makeClient(sayHelloService)
 
   // and run it
-  def run(args: List[String]): URIO[ZEnv, ExitCode] =
-    program.provideSomeLayer[ZEnv](loggingLayer).exitCode
+  def run =
+    program.provideSomeLayer(logging.console(logLevel=LogLevel.Debug)).exitCode
 
   lazy val program =
     for {
-      _        <- log.info("Hello client started")
+      _        <- ZIO.logInfo("Hello client started")
       config   = HttpClientConfig("localhost", 8080)
       request  = HelloRequest("Janet", "Hi!")
       response <- sayHelloService.invoke(sayHello)(request).provideLayer(httpClient(config))
-      _        <- log.info(s"Got ${response}")
-      _        <- log.info("Press [enter] to stop the client")
-      _        <- console.getStrLn
-      _        <- log.info("Hello client stopped")
+      _        <- ZIO.logInfo(s"Got ${response}")
+      _        <- ZIO.logInfo("Press [enter] to stop the client")
+      _        <- Console.readLine
+      _        <- ZIO.logInfo("Hello client stopped")
     } yield ()
 
   // misc utils
-  lazy val loggingLayer =
-    Logging.console(LogLevel.Debug, LogFormat.ColoredLogFormat()) >>>
-      Logging.withRootLoggerName("hello-example-client")
-
   def httpClient(config: HttpClientConfig) =
-    (ZLayer.requires[ZEnv with Logging] ++ ZLayer.succeed(config)) >+> helloClientLayer
+    ZLayer.succeed(config) >+> helloClientLayer
 }
 
 trait HelloExample extends HttpProtocolModule {

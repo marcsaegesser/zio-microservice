@@ -1,13 +1,14 @@
 package zio.web.http.auth
 
-import zio.test.{ DefaultRunnableSpec, Gen, assert, check }
+import zio.test.{ Gen, assert, check }
 import zio.test.Assertion.{ equalTo, isNone, isSome }
 import zio.web.http.auth.BasicAuth.AuthParams
+import zio.test.ZIOSpecDefault
 
-object AuthParamsSpec extends DefaultRunnableSpec {
+object AuthParamsSpec extends ZIOSpecDefault {
 
   def spec = suite("AuthParamsSpec")(
-    testM("return None when header is malformed") {
+    test("return None when header is malformed") {
       check(Gen.alphaNumericString) { header =>
         val r1 = AuthParams.create("realm", header)
         val r2 = AuthParams.create("realm", "")
@@ -18,7 +19,7 @@ object AuthParamsSpec extends DefaultRunnableSpec {
         assert(r3)(isNone)
       }
     },
-    testM("parse a well formed header") {
+    test("parse a well formed header") {
       check(Gen.alphaNumericStringBounded(1, 5), Gen.alphaNumericStringBounded(1, 5)) { (user, password) =>
         val realm  = "realm"
         val result = AuthParams.create(realm, headerValue(user, password))

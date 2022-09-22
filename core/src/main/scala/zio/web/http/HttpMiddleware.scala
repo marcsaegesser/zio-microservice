@@ -109,7 +109,7 @@ object HttpMiddleware {
     val none: Request[Any, Nothing, Unit] = apply(HttpRequest.Succeed, (_: Unit) => ZIO.unit)
 
     def stateless[R, E, M](p: HttpRequest[M], f: M => ZIO[R, E, Any]): Request[R, E, Unit] =
-      Request[R, E, Unit, M](p, m => f(m).unit.bimap(e => ((), e), _ => ()))
+      Request[R, E, Unit, M](p, m => f(m).unit.mapBoth(e => ((), e), _ => ()))
   }
 
   def request[M](request: HttpRequest[M]): RequestBuilder[M] = new RequestBuilder[M](request)

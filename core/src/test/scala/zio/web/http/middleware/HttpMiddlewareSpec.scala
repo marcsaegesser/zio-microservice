@@ -1,31 +1,30 @@
 package zio.web.http.middleware
 
-import zio.{ Chunk, UIO, ZIO, ZManaged }
-import zio.blocking.Blocking
-import zio.duration._
+import zio.{ Chunk, UIO, ZIO }
+
+
 import zio.stream.{ ZSink, ZStream }
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, assert }
-import zio.test.environment.TestClock
+import zio.test.assert
 import zio.web.http.auth.BasicAuth.AuthResult.{ Denied, Granted }
 import zio.web.http.auth.BasicAuth.{ AuthParams, AuthResult }
 import zio.web.http.{ HttpHeaders, Patch }
 import zio.web.http.auth.{ AuthParamsSpec, BasicAuth }
 import zio.web.http.model.StatusCode
 
-import java.io.{ ByteArrayOutputStream, File }
+import java.io.File
+import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
+import zio.test._
 
-object HttpMiddlewareSpec extends DefaultRunnableSpec {
+object HttpMiddlewareSpec extends ZIOSpecDefault {
 
-  def spec =
-    suite("HttpMiddleware")(loggingSpec, basicAuthSpec)
+  override def spec = Spec.multiple(Chunk(loggingSpec, basicAuthSpec))
 
   val loggingSpec = suite("logging")(
-    testM("with the True-Client-IP header") {
-      ZManaged.fromAutoCloseable(ZIO.succeed(new ByteArrayOutputStream())).use {
+    test("with the True-Client-IP header") {
+      ZIO.fromAutoCloseable(ZIO.succeed(new ByteArrayOutputStream())).flatMap {
         out =>
           val dest = ZSink
             .fromOutputStream(out)
@@ -33,20 +32,20 @@ object HttpMiddlewareSpec extends DefaultRunnableSpec {
 
           for {
             l       <- logging(dest).make
-            _       <- TestClock.setTime(0.seconds)
+            _       <- TestClock.setTime(java.time.Instant.EPOCH)
             state   <- l.runRequest(method, new URI(uri), version, HttpHeaders(Map(clientHeader -> ipAddr)))
             _       <- l.runResponse(state, status, HttpHeaders(Map(contentLengthHeader -> length.toString)))
             _       <- ZIO.succeed(out.size()).repeatUntil(_ > 0)
             content = new String(out.toByteArray, StandardCharsets.UTF_8)
           } yield assert(content)(
             equalTo(
-              s"$ipAddr - - [01/Jan/1970:00:00:00 +0000] ${"\""}$method $uri $version${"\""} $status $length\n"
+              s"""$ipAddr - - [01/Jan/1970:00:00:00 +0000] "$method $uri $version" $status $length\n"""
             )
           )
       }
     },
-    testM("with the X-Forwarded-For header") {
-      ZManaged.fromAutoCloseable(ZIO.succeed(new ByteArrayOutputStream())).use {
+    test("with the X-Forwarded-For header") {
+      ZIO.fromAutoCloseable(ZIO.succeed(new ByteArrayOutputStream())).flatMap {
         out =>
           val dest = ZSink
             .fromOutputStream(out)
@@ -54,20 +53,20 @@ object HttpMiddlewareSpec extends DefaultRunnableSpec {
 
           for {
             l       <- logging(dest).make
-            _       <- TestClock.setTime(0.seconds)
+            _       <- TestClock.setTime(java.time.Instant.EPOCH)
             state   <- l.runRequest(method, new URI(uri), version, HttpHeaders(Map(forwardedHeader -> ipAddr)))
             _       <- l.runResponse(state, status, HttpHeaders(Map(contentLengthHeader -> length.toString)))
             _       <- ZIO.succeed(out.size()).repeatUntil(_ > 0)
             content = new String(out.toByteArray, StandardCharsets.UTF_8)
           } yield assert(content)(
             equalTo(
-              s"$ipAddr - - [01/Jan/1970:00:00:00 +0000] ${"\""}$method $uri $version${"\""} $status $length\n"
+              s"""$ipAddr - - [01/Jan/1970:00:00:00 +0000] "$method $uri $version" $status $length\n"""
             )
           )
       }
     },
-    testM("without IP address") {
-      ZManaged.fromAutoCloseable(ZIO.succeed(new ByteArrayOutputStream())).use {
+    test("without IP address") {
+      ZIO.fromAutoCloseable(ZIO.succeed(new ByteArrayOutputStream())).flatMap {
         out =>
           val dest = ZSink
             .fromOutputStream(out)
@@ -75,7 +74,7 @@ object HttpMiddlewareSpec extends DefaultRunnableSpec {
 
           for {
             l       <- logging(dest).make
-            _       <- TestClock.setTime(0.seconds)
+            _       <- TestClock.setTime(java.time.Instant.EPOCH)
             state   <- l.runRequest(method, new URI(uri), version, HttpHeaders.empty)
             _       <- l.runResponse(state, status, HttpHeaders(Map(contentLengthHeader -> length.toString)))
             _       <- ZIO.succeed(out.size()).repeatUntil(_ > 0)
@@ -85,29 +84,28 @@ object HttpMiddlewareSpec extends DefaultRunnableSpec {
           )
       }
     },
-    testM("to the file") {
-      ZManaged
-        .make(ZIO.succeed(logFile))(path => ZIO.effect(new File(path).delete()).orDie)
-        .use {
+    test("to the file") {
+      ZIO
+        .acquireReleaseWith(ZIO.succeed(logFile))(path => ZIO.attempt(new File(path).delete()).orDie) {
           path =>
             for {
               l       <- fileLogging(path).make
-              _       <- TestClock.setTime(0.seconds)
+              _       <- TestClock.setTime(java.time.Instant.EPOCH)
               state   <- l.runRequest(method, new URI(uri), version, HttpHeaders(Map(clientHeader -> ipAddr)))
               _       <- l.runResponse(state, status, HttpHeaders(Map(contentLengthHeader -> length.toString)))
-              result  <- ZStream.fromFile(Paths.get(path), 32).runCollect
+              result  <- ZStream.fromFile(new File(path), 32).runCollect
               content = new String(result.toArray, StandardCharsets.UTF_8)
             } yield assert(content)(
               equalTo(
-                s"$ipAddr - - [01/Jan/1970:00:00:00 +0000] ${"\""}$method $uri $version${"\""} $status $length\n"
+                s"""$ipAddr - - [01/Jan/1970:00:00:00 +0000] "$method $uri $version" $status $length\n"""
               )
             )
         }
     }
-  ).provideCustomLayerShared(Blocking.live)
+  )//.provideCustomLayerShared(Blocking.live)
 
   val basicAuthSpec = suite("basicAuth")(
-    testM("don't modify the response when credentials are valid") {
+    test("don't modify the response when credentials are valid") {
       (for {
         m <- basicAuth(realm, authFn).make
         state <- m.runRequest(
@@ -121,7 +119,7 @@ object HttpMiddlewareSpec extends DefaultRunnableSpec {
         assert(patch)(equalTo(Patch.empty))
       })
     },
-    testM("return Unauthorized when the auth header is missing") {
+    test("return Unauthorized when the auth header is missing") {
       (for {
         m <- basicAuth(realm, authFn).make
         state <- m.runRequest(
@@ -136,7 +134,7 @@ object HttpMiddlewareSpec extends DefaultRunnableSpec {
         assert(patch)(equalTo(expected))
       })
     },
-    testM("return Forbidden when credentials are invalid") {
+    test("return Forbidden when credentials are invalid") {
       (for {
         m <- basicAuth(realm, authFn).make
         state <- m.runRequest(

@@ -1,9 +1,10 @@
 package zio.web.http.internal
 
-import zio.{ UIO, UManaged, URIO, ZIO, ZManaged }
+// import zio.{ UIO, URIO, ZIO, ZLayer }
+import zio._
 import zio.web.{ AnyF, Endpoint, Handlers }
 
-final private[http] class HttpController[-R](private val handlers: HttpController.HandlersMap, env: R) {
+final private[http] class HttpController[-R](private val handlers: HttpController.HandlersMap, env: R)(implicit argo: Tag[R]) {
 
   def handle(endpoint: HttpController.AnyEndpoint)(input: Any, params: Any): UIO[endpoint.Output] =
     handlers.get(endpoint) match {
@@ -13,7 +14,7 @@ final private[http] class HttpController[-R](private val handlers: HttpControlle
 
         handler
           .asInstanceOf[HandlerF](input.asInstanceOf[endpoint.Input], params.asInstanceOf[endpoint.Params])
-          .provide(env)
+          .provide(ZLayer.succeed(env))
     }
 }
 
@@ -31,12 +32,12 @@ object HttpController {
       handlersMap(nextAcc, tail)
   }
 
-  private[http] def make[M[_], R, Ids](handlers: Handlers[M, R, Ids], env: R): UManaged[HttpController[R]] = {
+  private[http] def make[M[_], R, Ids](handlers: Handlers[M, R, Ids], env: R)(implicit arg0: Tag[R]): UIO[HttpController[R]] = {
     type Actual   = Handlers[M, R, Ids]
     type Expected = Handlers[AnyF, R, Any]
 
     def cast(value: Actual): Expected = value.asInstanceOf[Expected]
 
-    ZManaged.succeed(new HttpController[R](handlersMap(Map.empty, cast(handlers)), env))
+    ZIO.succeed(new HttpController[R](handlersMap(Map.empty, cast(handlers)), env))
   }
 }

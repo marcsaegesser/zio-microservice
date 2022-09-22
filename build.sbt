@@ -36,6 +36,7 @@ inThisBuild(
 
 ThisBuild / publishTo := sonatypePublishToBundle.value
 
+
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
 addCommandAlias("testRelease", ";set every isSnapshot := false;+clean;+compile")
@@ -56,16 +57,18 @@ lazy val core = project
     buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion, isSnapshot),
     buildInfoPackage := "zio.web",
     libraryDependencies ++= Seq(
-      "dev.zio"        %% "zio"             % zioVersion,
-      "dev.zio"        %% "zio-logging"     % zioLoggingVersion,
-      "dev.zio"        %% "zio-streams"     % zioVersion,
-      "dev.zio"        %% "zio-schema-core" % zioSchemaVersion,
-      "dev.zio"        %% "zio-nio"         % zioNioVersion,
-      "dev.zio"        %% "zio-json"        % zioJsonVersion,
-      "dev.zio"        %% "zio-test"        % zioVersion % Test,
-      "dev.zio"        %% "zio-test-sbt"    % zioVersion % Test,
-      "com.propensive" %% "magnolia"        % magnoliaVersion,
-      "org.scala-lang" % "scala-reflect"    % scalaVersion.value % Provided
+      "dev.zio"          %% "zio"             % zioVersion,
+      "dev.zio"          %% "zio-logging"     % zioLoggingVersion,
+      "dev.zio"          %% "zio-streams"     % zioVersion,
+      "dev.zio"          %% "zio-schema"      % zioSchemaVersion,
+      "dev.zio"          %% "zio-schema-json" % zioSchemaVersion,
+      "dev.zio"          %% "zio-schema-derivation" % zioSchemaVersion,
+      "dev.zio"          %% "zio-nio"         % zioNioVersion,
+      "dev.zio"          %% "zio-json"        % zioJsonVersion,
+      "dev.zio"          %% "zio-test"        % zioVersion % Test,
+      "dev.zio"          %% "zio-test-sbt"    % zioVersion % Test,
+      "com.propensive"   %% "magnolia"        % magnoliaVersion,
+      "org.scala-lang"   %  "scala-reflect"   % scalaVersion.value % Provided
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )

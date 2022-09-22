@@ -1,12 +1,12 @@
 package zio.web.http
 
-import zio.test._
 import zio.test.Assertion.equalTo
-import zio.test.{ DefaultRunnableSpec, ZSpec }
+import zio.test._
+import zio.test.ZIOSpecDefault
 
-object HttpRequestTest extends DefaultRunnableSpec {
+object HttpRequestTest extends ZIOSpecDefault {
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
+  override def spec =
     suite("Http request test")(
       test("headers with zip") {
 

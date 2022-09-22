@@ -1,23 +1,26 @@
 package zio.web.http.internal
 
-import zio.random.Random
 import zio.test.Assertion._
 import zio.test.TestAspect.samples
 import zio.test._
 import zio.web.http.internal.HttpLexer.HeaderParseError._
 import zio.web.http.internal.HttpLexer.{ TokenChars, parseHeaders }
 import zio.web.http.model.{ Method, Version }
-import zio.{ Chunk, Task }
+import zio.{ ZIO, Chunk, ZLayer }
 
 import java.io.{ Reader, StringReader }
 import scala.util.{ Random => ScRandom }
+import zio.Random
+import zio.test.ZIOSpecDefault
 
-object HttpLexerSpec extends DefaultRunnableSpec {
+object HttpLexerSpec extends ZIOSpecDefault {
 
-  override def spec =
-    suite("All tests")(startLineSuite, headerSuite)
+  // override def spec =
+  //   suite("All tests")(List(startLineSuite, headerSuite))
 
-  def startLineSuite = suite("HTTP start line parsing")(
+  override def spec = Spec.multiple(Chunk(startLineSpec, headerSpec))
+
+  def startLineSpec = suite("HTTP start line parsing")(
     test("check OPTIONS method") {
       val startLine = HttpLexer.parseStartLine(new StringReader("OPTIONS /hello.htm HTTP/1.1\r\nheaders and body"))
       assert(startLine.method)(equalTo(Method.OPTIONS))
@@ -69,44 +72,44 @@ object HttpLexerSpec extends DefaultRunnableSpec {
       )
       assert(startLine.version)(equalTo(Version.V2))
     },
-    testM("check too long URI") {
+    test("check too long URI") {
       val longString = "a" * 2028
-      val result = Task(
+      val result = ZIO.attempt(
         HttpLexer
           .parseStartLine(new StringReader(s"POST https://absolute.uri/$longString HTTP/2.0\r\nheaders and body"))
-      ).run
-      assertM(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
+      ).exit
+      assertZIO(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
     },
-    testM("check corrupted HTTP request (no space)") {
-      val result = Task(HttpLexer.parseStartLine(new StringReader("POST/hello.htm HTTP/2.0\r\nheaders and body"))).run
-      assertM(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
+    test("check corrupted HTTP request (no space)") {
+      val result = ZIO.attempt(HttpLexer.parseStartLine(new StringReader("POST/hello.htm HTTP/2.0\r\nheaders and body"))).exit
+      assertZIO(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
     },
-    testM("check corrupted HTTP request (double CR)") {
+    test("check corrupted HTTP request (double CR)") {
       val result =
-        Task(HttpLexer.parseStartLine(new StringReader("POST /hello.htm HTTP/2.0\r\r\nheaders and body"))).run
-      assertM(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
+        ZIO.attempt(HttpLexer.parseStartLine(new StringReader("POST /hello.htm HTTP/2.0\r\r\nheaders and body"))).exit
+      assertZIO(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
     },
-    testM("check corrupted HTTP request (random string)") {
-      val result = Task(HttpLexer.parseStartLine(new StringReader(new ScRandom().nextString(2048)))).run
-      assertM(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
+    test("check corrupted HTTP request (random string)") {
+      val result = ZIO.attempt(HttpLexer.parseStartLine(new StringReader(new ScRandom().nextString(2048)))).exit
+      assertZIO(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
     },
-    testM("check corrupted HTTP request (very long random string)") {
-      val result = Task(HttpLexer.parseStartLine(new StringReader(new ScRandom().nextString(4096000)))).run
-      assertM(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
+    test("check corrupted HTTP request (very long random string)") {
+      val result = ZIO.attempt(HttpLexer.parseStartLine(new StringReader(new ScRandom().nextString(4096000)))).exit
+      assertZIO(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
     },
-    testM("check invalid HTTP method") {
-      val result = Task(HttpLexer.parseStartLine(new StringReader("GRAB /hello.htm HTTP/2.0\r\nheaders and body"))).run
-      assertM(result)(fails(isSubtype[IllegalArgumentException](hasMessage(equalTo("Unable to handle method: GRAB")))))
+    test("check invalid HTTP method") {
+      val result = ZIO.attempt(HttpLexer.parseStartLine(new StringReader("GRAB /hello.htm HTTP/2.0\r\nheaders and body"))).exit
+      assertZIO(result)(fails(isSubtype[IllegalArgumentException](hasMessage(equalTo("Unable to handle method: GRAB")))))
     },
-    testM("check invalid HTTP version") {
-      val result = Task(HttpLexer.parseStartLine(new StringReader("POST /hello.htm HTTP2.0\r\nheaders and body"))).run
-      assertM(result)(
+    test("check invalid HTTP version") {
+      val result = ZIO.attempt(HttpLexer.parseStartLine(new StringReader("POST /hello.htm HTTP2.0\r\nheaders and body"))).exit
+      assertZIO(result)(
         fails(isSubtype[IllegalArgumentException](hasMessage(equalTo("Unable to handle version: HTTP2.0"))))
       )
     },
-    testM("check empty input") {
-      val result = Task(HttpLexer.parseStartLine(new StringReader(""))).run
-      assertM(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
+    test("check empty input") {
+      val result = ZIO.attempt(HttpLexer.parseStartLine(new StringReader(""))).exit
+      assertZIO(result)(fails(isSubtype[IllegalStateException](hasMessage(equalTo("Malformed HTTP start-line")))))
     },
     test("check URI") {
       val startLine = HttpLexer.parseStartLine(new StringReader("OPTIONS /hello.htm HTTP/1.1\r\nheaders and body"))
@@ -170,10 +173,10 @@ object HttpLexerSpec extends DefaultRunnableSpec {
       as.map { a =>
         Gen
           .const(a)
-          .crossWith(factor)((a, factor) => List.fill(factor)(a))
+          .zipWith(factor)((a, factor) => List.fill(factor)(a))
       }
     Gen
-      .crossAll(listOfGenDuplicates)
+      .collectAll(listOfGenDuplicates)
       .map(_.flatten)
   }
 
@@ -244,9 +247,9 @@ object HttpLexerSpec extends DefaultRunnableSpec {
       )
     }
 
-  def headerSuite =
+  def headerSpec =
     suite("http header lexer")(
-      testM("generated positive cases") {
+      test("generated positive cases") {
         check(testGen) {
           case (msg, headersToExtract, expectedBody, expectedHeaders) =>
             val reader        = new StringReader(msg)
@@ -256,21 +259,21 @@ object HttpLexerSpec extends DefaultRunnableSpec {
             assert(actualBody)(equalTo(expectedBody))
         }
       } @@ samples(1000),
-      testM("failure scenarios") {
-        checkM(failureScenarios) {
+      test("failure scenarios") {
+        check(failureScenarios) {
           case (request, expectedError) =>
-            assertM(
-              Task(
+            assertZIO(
+              ZIO.attempt(
                 parseHeaders(
                   Array("some-header"),
                   new StringReader(request),
                   TestHeaderSizeLimit
                 )
-              ).run
+              ).exit
             )(fails(equalTo(expectedError)))
         }
       }
-    )
+    ).provideLayer(ZLayer.succeed(Random.RandomLive))
 
   private def mkString(reader: Reader) = {
     var c       = -1

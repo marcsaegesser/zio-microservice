@@ -13,12 +13,12 @@ object BuildHelper {
   val Scala212 = "2.12.13"
   val Scala213 = "2.13.5"
 
-  val zioVersion        = "1.0.5"
-  val zioLoggingVersion = "0.5.8"
-  val zioSchemaVersion  = "0.0.1"
-  val zioJsonVersion    = "0.1"
-  val zioNioVersion     = "1.0.0-RC10"
-  val silencerVersion   = "1.7.3"
+  val zioVersion        = "2.0.2"
+  val zioLoggingVersion = "2.1.1"
+  val zioSchemaVersion  = "0.2.1"
+  val zioJsonVersion    = "0.3.0"
+  val zioNioVersion     = "2.0.0"
+  val silencerVersion   = "1.7.8"
   val magnoliaVersion   = "0.17.0"
 
   private val testDeps = Seq(
@@ -101,9 +101,10 @@ object BuildHelper {
   def stdSettings(prjName: String) =
     Seq(
       name := s"$prjName",
-      crossScalaVersions := Seq(Scala213, Scala212, Scala211),
+      crossScalaVersions := Seq(Scala213, Scala212),
       scalaVersion in ThisBuild := crossScalaVersions.value.head,
       scalacOptions := compilerOptions(scalaVersion.value, optimize = !isSnapshot.value),
+      scalacOptions in (Test, console) ~= (_.filterNot(o => o == "-Ywarn-unused" || o == "-Xlint:_,-type-parameter-shadow")),
       libraryDependencies ++= compileOnlyDeps(scalaVersion.value) ++ testDeps,
       parallelExecution in Test := true,
       incOptions ~= (_.withLogRecompileOnMacro(true)),

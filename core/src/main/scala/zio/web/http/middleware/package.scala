@@ -1,9 +1,8 @@
 package zio.web.http
 
 import zio._
-import zio.blocking.Blocking
-import zio.clock._
-import zio.stream.{ Sink, ZSink, ZStream }
+
+import zio.stream.{ ZSink, ZStream }
 import zio.web.http.HttpMiddleware._
 import zio.web.http.auth.BasicAuth
 import zio.web.http.auth.BasicAuth.AuthResult.{ Denied, Granted }
@@ -11,10 +10,11 @@ import zio.web.http.auth.BasicAuth.{ AuthParams, AuthResult }
 
 import java.io.{ FileOutputStream, IOException, OutputStream }
 import java.time.format.DateTimeFormatter
+import zio.Clock.currentDateTime
 
 package object middleware {
 
-  def logging[R, E](sink: ZSink[R, E, String, Byte, Long]): HttpMiddleware[Clock with R, Nothing] = {
+  def logging[R, E](sink: ZSink[R, E, String, Byte, Long]): HttpMiddleware[R, Nothing] = {
     val formatter = DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss Z")
 
     HttpMiddleware(
@@ -27,11 +27,10 @@ package object middleware {
           case (((method, uri), version), ipAddr) =>
             val ipStr = ipAddr.fold("-")(_.getHostAddress)
             currentDateTime
-              .fold(
-                _ => s"$ipStr - - - ${"\""}$method $uri $version${"\""}",
+              .map(
                 now => {
                   val time = now.format(formatter)
-                  s"$ipStr - - [$time] ${"\""}$method $uri $version${"\""}"
+                  s"""$ipStr - - [$time] "$method $uri $version""""
                 }
               )
         },
@@ -43,19 +42,19 @@ package object middleware {
     )
   }
 
-  def fileLogging[R](path: String): HttpMiddleware[Clock with Blocking, Nothing] =
+  def fileLogging[R](path: String): HttpMiddleware[Any, Nothing] =
     logging(fileSink(path))
 
-  private[middleware] def fileSink(path: String): ZSink[Blocking, Throwable, String, Byte, Long] = {
-    val stream: ZManaged[Blocking, IOException, OutputStream] =
-      ZManaged
+  private[middleware] def fileSink(path: String): ZSink[Any, Throwable, String, Byte, Long] = {
+    val stream: ZIO[Scope, IOException, OutputStream] =
+      ZIO
         .fromAutoCloseable(
-          ZIO.effect(new FileOutputStream(path, true))
+          ZIO.attempt(new FileOutputStream(path, true))
         )
         .refineToOrDie[IOException]
 
-    Sink
-      .fromOutputStreamManaged(stream)
+    ZSink
+      .fromOutputStreamScoped(stream)
       .contramapChunks[String](_.flatMap(str => Chunk.fromIterable(str.getBytes)))
   }
 
@@ -67,7 +66,7 @@ package object middleware {
             case Left(header) =>
               AuthParams.create(realm, header) match {
                 case Some(params) =>
-                  authenticate(params).bimap(e => (Option(Denied), e), g => Option(g))
+                  authenticate(params).mapBoth(e => (Option(Denied), e), g => Option(g))
                 case None =>
                   ZIO.succeed(None)
               }

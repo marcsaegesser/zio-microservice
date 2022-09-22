@@ -3,11 +3,12 @@ package zio.web.docs
 import zio.test.Assertion._
 import zio.test._
 import zio.web.docs.Doc.Text.{ bold, italic, strikethrough, stringToInlineElement }
+import zio.test.ZIOSpecDefault
 
-object DocTest extends DefaultRunnableSpec {
+object DocTest extends ZIOSpecDefault {
   import Doc._
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
+  override def spec =
     /**
      * - Markdown spec https://spec.commonmark.org/0.29/#preliminariesz
      * - Markdown examples taken from https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet

@@ -1,9 +1,7 @@
 package zio.web.http
 
 import zio._
-import zio.blocking.Blocking
-import zio.clock.Clock
-import zio.logging.Logging
+
 import zio.web.http.model._
 import zio.web._
 
@@ -21,17 +19,17 @@ trait HttpProtocolModule extends ProtocolModule {
 
   val allProtocols: Map[String, codec.Codec]
 
-  override def makeServer[M[+_] <: MinMetadata[_], R <: Has[ServerConfig]: Tag, E, Ids: Tag](
+  override def makeServer[M[+_] <: MinMetadata[_], R <: ServerConfig: Tag, E, Ids: Tag](
     middleware: Middleware[R, E],
     endpoints: Endpoints[M, Ids],
     handlers: Handlers[M, R, Ids]
-  ): ZLayer[R with Blocking with Logging, IOException, Has[ServerService]] = {
+  ): ZLayer[R, IOException, ServerService] = {
     val _ = middleware
 
-    ZLayer.fromManaged(
+    ZLayer.scoped[R](
       for {
-        config <- ZIO.service[ServerConfig].toManaged_
-        env    <- ZIO.environment[R].toManaged_
+        config <- ZIO.service[ServerConfig]
+        env    <- ZIO.service[R]
         server <- HttpServer.build(config, endpoints, handlers, env)
       } yield server
     )
@@ -39,10 +37,10 @@ trait HttpProtocolModule extends ProtocolModule {
 
   override def makeClient[M[+_] <: MinMetadata[_], Ids: Tag](
     endpoints: Endpoints[M, Ids]
-  ): ZLayer[Has[ClientConfig] with Clock with Logging, IOException, Has[ClientService[Ids]]] =
-    ZLayer.fromManaged(
+  ): ZLayer[ClientConfig, IOException, ClientService[Ids]] =
+    ZLayer.scoped(
       for {
-        config <- ZIO.service[ClientConfig].toManaged_
+        config <- ZIO.service[ClientConfig]
         client <- HttpClient.build(config, endpoints)
       } yield client
     )
